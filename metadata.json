@@ -1,0 +1,5 @@
+{
+  "name": "FlowState",
+  "description": "A full-stack songwriting application featuring a rhyme engine and smart thesaurus.",
+  "requestFramePermissions": []
+}
