@@ -5,16 +5,13 @@ export interface RhymeData {
   rhymes: string[];
 }
 
-export interface ThesaurusData {
-  synonyms: DatamuseResult[];
-  meansLike: DatamuseResult[];
-  adjectives: DatamuseResult[];
-}
-
-export interface DatamuseResult {
-  word: string;
-  score: number;
-  tags?: string[];
+export interface RhymeExplorerData {
+  mode: "sounds" | "words";
+  sections: {
+    label: string;
+    type: string;
+    results: { word: string; score: number; numSyllables?: number }[];
+  }[];
 }
 
 export const fetchRhymes = async (word: string): Promise<RhymeData> => {
@@ -22,7 +19,10 @@ export const fetchRhymes = async (word: string): Promise<RhymeData> => {
   return response.data;
 };
 
-export const fetchThesaurus = async (word: string): Promise<ThesaurusData> => {
-  const response = await axios.get(`/api/thesaurus?word=${word}`);
+export const fetchRhymeExplorer = async (
+  word: string,
+  mode: "sounds" | "words"
+): Promise<RhymeExplorerData> => {
+  const response = await axios.get(`/api/rhyme-explorer?word=${encodeURIComponent(word)}&mode=${mode}`);
   return response.data;
 };

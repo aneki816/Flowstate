@@ -3,10 +3,10 @@ import { createEditor, Descendant, Editor, Transforms, Text, Node, Range } from 
 import { Slate, Editable, withReact, RenderElementProps, RenderLeafProps, ReactEditor } from 'slate-react';
 import { withHistory } from 'slate-history';
 import { SyllableGutter } from './SyllableGutter';
-import { ThesaurusMenu } from './ThesaurusMenu';
-import { fetchRhymes, fetchThesaurus, ThesaurusData } from '@/lib/api';
+import { RhymeExplorer } from './RhymeExplorer';
+import { fetchRhymes } from '@/lib/api';
 import { RHYME_COLORS, cn } from '@/lib/utils';
-import { Loader2, FolderOpen, Download, Trash2, FileJson, FileText, FileType, Menu, X, Plus } from 'lucide-react';
+import { Loader2, FolderOpen, Download, Trash2, FileJson, FileText, FileType, Menu, X, Plus, BookOpen } from 'lucide-react';
 
 // Define initial value
 const initialValue: Descendant[] = [
@@ -51,14 +51,18 @@ export const FlowEditor: React.FC = () => {
     }
   }, []);
 
-  // Rhyme State
-  const [rhymeGroups, setRhymeGroups] = useState<RhymeGroup[]>([]);
-  const [analyzingWord, setAnalyzingWord] = useState<string | null>(null);
+  // Rhyme Explorer State
+  const [isExplorerOpen, setIsExplorerOpen] = useState(true);
+  const [explorerWord, setExplorerWord] = useState<string | null>(null);
 
   // Refs for race condition handling
   const rhymeGroupsRef = useRef<RhymeGroup[]>([]);
   const processingQueue = useRef<Array<{ word: string; range: Range }>>([]);
   const isProcessing = useRef(false);
+
+  // Rhyme State
+  const [rhymeGroups, setRhymeGroups] = useState<RhymeGroup[]>([]);
+  const [analyzingWord, setAnalyzingWord] = useState<string | null>(null);
 
   // Sync ref with state
   useEffect(() => {
@@ -186,12 +190,6 @@ export const FlowEditor: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [saveSong]);
-
-  // Thesaurus State
-  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [thesaurusData, setThesaurusData] = useState<ThesaurusData | null>(null);
-  const [loadingThesaurus, setLoadingThesaurus] = useState(false);
 
   // Render Element (Paragraphs)
   const renderElement = useCallback((props: RenderElementProps) => {
@@ -347,8 +345,8 @@ export const FlowEditor: React.FC = () => {
              
              if (start !== -1) {
                 const range = {
-                  anchor: { path, offset: start },
-                  focus: { path, offset: start + lastWord.length }
+                   anchor: { path, offset: start },
+                   focus: { path, offset: start + lastWord.length }
                 };
                 
                 // Trigger check
@@ -366,23 +364,17 @@ export const FlowEditor: React.FC = () => {
     
     // 1. Try to get the Slate Range from the click position
     try {
-      // Use document.caretRangeFromPoint to find where the user clicked
-      // This works even if the user clicked on a styled span
       if (document.caretRangeFromPoint) {
         const domRange = document.caretRangeFromPoint(event.clientX, event.clientY);
         if (domRange) {
-          // Convert DOM range to Slate range
           const range = ReactEditor.toSlateRange(editor, domRange, {
             exactMatch: false,
             suppressThrow: true,
           });
 
           if (range) {
-            // Select the clicked point
             Transforms.select(editor, range);
 
-            // Expand selection to the word boundary
-            // We use Editor.before and Editor.after with 'word' unit
             const start = Editor.before(editor, range, { unit: 'word' });
             const end = Editor.after(editor, range, { unit: 'word' });
 
@@ -393,15 +385,8 @@ export const FlowEditor: React.FC = () => {
               const word = Editor.string(editor, wordRange);
               
               if (word && word.trim()) {
-                setMenuPosition({ x: event.clientX, y: event.clientY });
-                setSelectedWord(word.trim());
-                setLoadingThesaurus(true);
-                setThesaurusData(null);
-                
-                fetchThesaurus(word.trim())
-                  .then(setThesaurusData)
-                  .catch(console.error)
-                  .finally(() => setLoadingThesaurus(false));
+                setExplorerWord(word.trim());
+                setIsExplorerOpen(true);
                 return;
               }
             }
@@ -409,18 +394,23 @@ export const FlowEditor: React.FC = () => {
         }
       }
     } catch (e) {
-      console.error("Error selecting word for thesaurus:", e);
+      console.error("Error selecting word for explorer:", e);
     }
-
-    // Fallback: If we couldn't select a word, close the menu
-    setMenuPosition(null);
   };
 
-  const handleThesaurusSelect = (word: string) => {
+  const handleSelectWord = (word: string) => {
     if (editor.selection) {
-       editor.insertText(word);
+       // If something is selected (like the word we right-clicked), replace it
+       if (!Range.isCollapsed(editor.selection)) {
+         Transforms.insertText(editor, word);
+       } else {
+         // Otherwise just insert at cursor
+         Transforms.insertText(editor, word);
+       }
+    } else {
+      // Fallback if no selection
+      Transforms.insertText(editor, word);
     }
-    setMenuPosition(null);
   };
 
   return (
@@ -503,6 +493,13 @@ export const FlowEditor: React.FC = () => {
                Analyzing rhymes...
              </div>
            )}
+           <button 
+             onClick={() => setIsExplorerOpen(!isExplorerOpen)}
+             className="pointer-events-auto p-2 bg-zinc-900 rounded-md border border-zinc-800 hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-indigo-400"
+             title="Toggle Rhyme Explorer"
+           >
+             <BookOpen size={16} />
+           </button>
         </div>
 
         <div key={editorKey} className="contents">
@@ -519,14 +516,16 @@ export const FlowEditor: React.FC = () => {
         </div>
       </div>
 
-      <ThesaurusMenu
-        position={menuPosition}
-        word={selectedWord}
-        data={thesaurusData}
-        loading={loadingThesaurus}
-        onClose={() => setMenuPosition(null)}
-        onSelect={handleThesaurusSelect}
-      />
+      {/* Rhyme Explorer Panel */}
+      <div className={cn(
+        "h-full transition-all duration-300 ease-in-out overflow-hidden",
+        isExplorerOpen ? "w-80 opacity-100" : "w-0 opacity-0"
+      )}>
+        <RhymeExplorer 
+          initialWord={explorerWord} 
+          onSelectWord={handleSelectWord}
+        />
+      </div>
     </div>
   );
 };

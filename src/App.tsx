@@ -18,7 +18,7 @@ export default function App() {
              <span className="w-2 h-2 rounded-full bg-zinc-600 mr-2"></span>
              <span>Enter = Rhyme Check</span>
              <span className="mx-2 text-zinc-700">|</span>
-             <span>Right Click = Thesaurus</span>
+             <span>Right Click = Rhyme Explorer</span>
           </div>
           <div className="text-xs text-zinc-500 font-mono">
             v1.0.0
